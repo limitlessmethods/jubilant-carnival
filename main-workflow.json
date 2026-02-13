@@ -1,0 +1,1794 @@
+{
+  "name": "Pro Short-Form Auto-Poster v2",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 16
+            },
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "schedule-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": {
+          "__rl": true,
+          "value": "[YOUR_CONTENT_DB_ID]",
+          "mode": "id"
+        },
+        "returnAll": false,
+        "limit": 5,
+        "filterType": "formula",
+        "filterJson": "{\n  \"and\": [\n    {\n      \"property\": \"Platform\",\n      \"select\": {\n        \"equals\": \"Short Form\"\n      }\n    },\n    {\n      \"property\": \"Status\",\n      \"select\": {\n        \"equals\": \"Ready To Post\"\n      }\n    },\n    {\n      \"or\": [\n        {\n          \"property\": \"processing_started\",\n          \"date\": {\n            \"is_empty\": true\n          }\n        },\n        {\n          \"property\": \"processing_started\",\n          \"date\": {\n            \"before\": \"{{ $now.minus({ hours: 2 }).toISO() }}\"\n          }\n        }\n      ]\n    }\n  ]\n}",
+        "sort": {
+          "sortValues": [
+            {
+              "key": "Created",
+              "direction": "ascending"
+            }
+          ]
+        }
+      },
+      "id": "query-notion",
+      "name": "Query Notion",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [250, 300],
+      "credentials": {
+        "notionApi": {
+          "id": "[YOUR_NOTION_CRED_ID]",
+          "name": "[YOUR_NOTION_CRED_NAME]"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-content",
+              "leftValue": "={{ $json }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-has-content",
+      "name": "IF - Has Content",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "processing_started",
+              "dateValue": "={{ $now.toISO() }}"
+            }
+          ]
+        }
+      },
+      "id": "set-processing-lock",
+      "name": "Set Processing Lock",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [750, 200],
+      "credentials": {
+        "notionApi": {
+          "id": "[YOUR_NOTION_CRED_ID]",
+          "name": "[YOUR_NOTION_CRED_NAME]"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst validItems = [];\nconst invalidItems = [];\n\nfor (const item of items) {\n  const errors = [];\n  const props = item.json;\n\n  // Check media file exists and is a valid URL\n  const mediaFiles = props.property_media_file;\n  if (!mediaFiles || !Array.isArray(mediaFiles) || mediaFiles.length === 0) {\n    errors.push('Missing media file');\n  } else {\n    const url = mediaFiles[0]?.url || mediaFiles[0]?.external?.url || mediaFiles[0];\n    if (!url || typeof url !== 'string' || !url.startsWith('http')) {\n      errors.push('Invalid media file URL');\n    }\n  }\n\n  // Check caption is non-empty\n  const caption = props.property_caption;\n  if (!caption || (typeof caption === 'string' && caption.trim() === '')) {\n    errors.push('Caption is empty');\n  }\n\n  // YouTube title check\n  const youtubeTitle = props.youtube_title || props.property_youtube_title || props.title;\n  if (!youtubeTitle || (typeof youtubeTitle === 'string' && youtubeTitle.trim() === '')) {\n    errors.push('Missing YouTube title (youtube_title or title required)');\n  }\n\n  // Caption length checks per platform\n  const captionStr = typeof caption === 'string' ? caption : JSON.stringify(caption || '');\n  if (captionStr.length > 2200) {\n    errors.push(`Caption too long for Instagram (${captionStr.length}/2200)`);\n  }\n  if (captionStr.length > 4000) {\n    errors.push(`Caption too long for TikTok (${captionStr.length}/4000)`);\n  }\n  if (captionStr.length > 500) {\n    // Just a warning for Twitter, not blocking\n  }\n\n  if (errors.length > 0) {\n    invalidItems.push({\n      json: {\n        ...props,\n        validation_errors: errors,\n        validation_error: errors.join('; ')\n      }\n    });\n  } else {\n    validItems.push(item);\n  }\n}\n\nreturn [validItems, invalidItems];"
+      },
+      "id": "content-validation",
+      "name": "Content Validation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 200],
+      "outputs": ["main", "main"],
+      "outputNames": ["Valid", "Invalid"]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Status",
+              "selectValue": "Validation Error"
+            },
+            {
+              "key": "validation_error",
+              "richTextValue": "={{ $json.validation_error }}"
+            },
+            {
+              "key": "processing_started",
+              "dateValue": ""
+            }
+          ]
+        }
+      },
+      "id": "invalid-content-notion",
+      "name": "Update Invalid to Notion",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [1250, 450],
+      "credentials": {
+        "notionApi": {
+          "id": "[YOUR_NOTION_CRED_ID]",
+          "name": "[YOUR_NOTION_CRED_NAME]"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "[YOUR_SLACK_WEBHOOK_URL]",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \":warning: *Content Validation Failed*\\n\\n*Title:* {{ $json.title || $json.property_title || 'Unknown' }}\\n*Errors:* {{ $json.validation_error }}\\n*Page ID:* {{ $json.id }}\"\n}"
+      },
+      "id": "invalid-content-slack",
+      "name": "Slack - Validation Failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1500, 450]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "[YOUR_ANTHROPIC_API_KEY]"
+            },
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"claude-sonnet-4-20250514\",\n  \"max_tokens\": 4096,\n  \"system\": \"You are a social media caption optimizer for a personal brand. Brand voice mix: Storyteller 30%, Opinionator 25%, Fact Presenter 20%, Frameworker 20%, F-Bomber 5%. Style: Casual, conversational, data-driven, action-oriented. Uses present tense time markers, specific numbers. Transitions with 'Anyway' or 'My point is'. Return a JSON object with keys: tiktok_caption, instagram_caption, youtube_caption, threads_caption, linkedin_caption, twitter_caption, facebook_caption, pinterest_caption. Each should be optimized for that platform's character limits and best practices.\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"Optimize this caption for all 8 social platforms. Master caption: {{ $json.property_caption }}. Content title: {{ $json.title || $json.property_title || '' }}. Return ONLY valid JSON with platform-specific captions.\"\n    }\n  ]\n}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "claude-enrichment",
+      "name": "Claude Caption Enrichment",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1250, 100],
+      "continueOnFail": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst notionItem = $('Content Validation').first();\nlet enrichedCaptions = {};\n\ntry {\n  const response = item.json;\n  if (response.content && response.content[0] && response.content[0].text) {\n    const text = response.content[0].text;\n    // Try to parse JSON from the response\n    const jsonMatch = text.match(/\\{[\\s\\S]*\\}/);\n    if (jsonMatch) {\n      enrichedCaptions = JSON.parse(jsonMatch[0]);\n    }\n  }\n} catch (e) {\n  // Fallback: use master caption for all platforms\n  enrichedCaptions = {};\n}\n\nconst masterCaption = notionItem.json.property_caption || '';\n\nreturn [{\n  json: {\n    ...notionItem.json,\n    tiktok_caption: enrichedCaptions.tiktok_caption || masterCaption,\n    instagram_caption: enrichedCaptions.instagram_caption || masterCaption,\n    youtube_caption: enrichedCaptions.youtube_caption || masterCaption,\n    threads_caption: enrichedCaptions.threads_caption || masterCaption,\n    linkedin_caption: enrichedCaptions.linkedin_caption || masterCaption,\n    twitter_caption: enrichedCaptions.twitter_caption || masterCaption,\n    facebook_caption: enrichedCaptions.facebook_caption || masterCaption,\n    pinterest_caption: enrichedCaptions.pinterest_caption || masterCaption,\n    ai_enriched: Object.keys(enrichedCaptions).length > 0\n  }\n}];"
+      },
+      "id": "parse-enrichment",
+      "name": "Parse Enrichment",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1500, 100]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "ai_enriched",
+              "checkboxValue": true
+            },
+            {
+              "key": "property_tiktok_caption",
+              "richTextValue": "={{ $json.tiktok_caption }}"
+            },
+            {
+              "key": "property_instagram_caption",
+              "richTextValue": "={{ $json.instagram_caption }}"
+            },
+            {
+              "key": "property_youtube_caption",
+              "richTextValue": "={{ $json.youtube_caption }}"
+            },
+            {
+              "key": "property_threads_caption",
+              "richTextValue": "={{ $json.threads_caption }}"
+            },
+            {
+              "key": "property_linkedin_caption",
+              "richTextValue": "={{ $json.linkedin_caption }}"
+            },
+            {
+              "key": "property_twitter_caption",
+              "richTextValue": "={{ $json.twitter_caption }}"
+            },
+            {
+              "key": "property_facebook_caption",
+              "richTextValue": "={{ $json.facebook_caption }}"
+            },
+            {
+              "key": "property_pinterest_caption",
+              "richTextValue": "={{ $json.pinterest_caption }}"
+            }
+          ]
+        }
+      },
+      "id": "update-enriched-captions",
+      "name": "Update Enriched Captions",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [1750, 100],
+      "credentials": {
+        "notionApi": {
+          "id": "[YOUR_NOTION_CRED_ID]",
+          "name": "[YOUR_NOTION_CRED_NAME]"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "uploadMedia",
+        "mediaUrl": "={{ $json.property_media_file[0].url || $json.property_media_file[0].external?.url || $json.property_media_file[0] }}"
+      },
+      "id": "blotato-upload",
+      "name": "Blotato Media Upload",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [2000, 200],
+      "credentials": {
+        "blotatoApi": {
+          "id": "[YOUR_BLOTATO_CRED_ID]",
+          "name": "[YOUR_BLOTATO_CRED_NAME]"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "upload-success",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-upload-success",
+      "name": "IF - Upload Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2250, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst platforms = ['tiktok', 'instagram', 'youtube', 'threads', 'linkedin', 'twitter', 'facebook', 'pinterest'];\nconst results = platforms.map(p => ({\n  json: {\n    platform: p,\n    status: 'failed',\n    error_message: 'Media upload failed: ' + (item.json.error || 'Unknown error'),\n    master_page_id: item.json.id || '',\n    content_title: item.json.title || item.json.property_title || 'Unknown',\n    media_url: '',\n    caption_used: '',\n    workflow_execution_id: $execution.id\n  }\n}));\nreturn results;"
+      },
+      "id": "upload-fail-all",
+      "name": "Mark All Platforms Failed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2500, 400]
+    },
+    {
+      "parameters": {
+        "operation": "createPost",
+        "platform": "tiktok",
+        "accountId": "[TIKTOK_ACCOUNT_ID]",
+        "caption": "={{ $('Parse Enrichment').item.json.tiktok_caption || $('Query Notion').item.json.property_tiktok_caption || $('Query Notion').item.json.property_caption }}",
+        "mediaId": "={{ $('Blotato Media Upload').item.json.mediaId }}"
+      },
+      "id": "post-tiktok",
+      "name": "Post to TikTok",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [2500, 100],
+      "credentials": {
+        "blotatoApi": {
+          "id": "[YOUR_BLOTATO_CRED_ID]",
+          "name": "[YOUR_BLOTATO_CRED_NAME]"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "tiktok-platform",
+              "name": "platform",
+              "value": "tiktok",
+              "type": "string"
+            },
+            {
+              "id": "tiktok-status",
+              "name": "status",
+              "value": "={{ $json.error ? 'failed' : 'success' }}",
+              "type": "string"
+            },
+            {
+              "id": "tiktok-error",
+              "name": "error_message",
+              "value": "={{ $json.error || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "tiktok-page-id",
+              "name": "master_page_id",
+              "value": "={{ $('Query Notion').item.json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "tiktok-title",
+              "name": "content_title",
+              "value": "={{ $('Query Notion').item.json.title || $('Query Notion').item.json.property_title || 'Unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "tiktok-media",
+              "name": "media_url",
+              "value": "={{ $('Blotato Media Upload').item.json.mediaUrl || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "tiktok-caption",
+              "name": "caption_used",
+              "value": "={{ $('Parse Enrichment').item.json.tiktok_caption || $('Query Notion').item.json.property_caption }}",
+              "type": "string"
+            },
+            {
+              "id": "tiktok-exec",
+              "name": "workflow_execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "set-tiktok-result",
+      "name": "Set TikTok Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [2750, 100]
+    },
+    {
+      "parameters": {
+        "amount": 45,
+        "unit": "seconds"
+      },
+      "id": "wait-after-tiktok",
+      "name": "Wait After TikTok",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [3000, 100],
+      "webhookId": "wait-tiktok"
+    },
+    {
+      "parameters": {
+        "operation": "createPost",
+        "platform": "instagram",
+        "accountId": "[INSTAGRAM_ACCOUNT_ID]",
+        "caption": "={{ $('Parse Enrichment').item.json.instagram_caption || $('Query Notion').item.json.property_instagram_caption || $('Query Notion').item.json.property_caption }}",
+        "mediaId": "={{ $('Blotato Media Upload').item.json.mediaId }}"
+      },
+      "id": "post-instagram",
+      "name": "Post to Instagram",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [3250, 100],
+      "credentials": {
+        "blotatoApi": {
+          "id": "[YOUR_BLOTATO_CRED_ID]",
+          "name": "[YOUR_BLOTATO_CRED_NAME]"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ig-platform",
+              "name": "platform",
+              "value": "instagram",
+              "type": "string"
+            },
+            {
+              "id": "ig-status",
+              "name": "status",
+              "value": "={{ $json.error ? 'failed' : 'success' }}",
+              "type": "string"
+            },
+            {
+              "id": "ig-error",
+              "name": "error_message",
+              "value": "={{ $json.error || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "ig-page-id",
+              "name": "master_page_id",
+              "value": "={{ $('Query Notion').item.json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "ig-title",
+              "name": "content_title",
+              "value": "={{ $('Query Notion').item.json.title || $('Query Notion').item.json.property_title || 'Unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "ig-media",
+              "name": "media_url",
+              "value": "={{ $('Blotato Media Upload').item.json.mediaUrl || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "ig-caption",
+              "name": "caption_used",
+              "value": "={{ $('Parse Enrichment').item.json.instagram_caption || $('Query Notion').item.json.property_caption }}",
+              "type": "string"
+            },
+            {
+              "id": "ig-exec",
+              "name": "workflow_execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "set-instagram-result",
+      "name": "Set Instagram Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [3500, 100]
+    },
+    {
+      "parameters": {
+        "amount": 45,
+        "unit": "seconds"
+      },
+      "id": "wait-after-instagram",
+      "name": "Wait After Instagram",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [3750, 100],
+      "webhookId": "wait-instagram"
+    },
+    {
+      "parameters": {
+        "operation": "createPost",
+        "platform": "youtube",
+        "accountId": "[YOUTUBE_ACCOUNT_ID]",
+        "caption": "={{ $('Parse Enrichment').item.json.youtube_caption || $('Query Notion').item.json.property_youtube_caption || $('Query Notion').item.json.property_caption }}",
+        "mediaId": "={{ $('Blotato Media Upload').item.json.mediaId }}",
+        "postCreateYoutubeOptionTitle": "={{ $('Query Notion').item.json.youtube_title || $('Query Notion').item.json.property_youtube_title || $('Query Notion').item.json.title || $('Query Notion').item.json.property_title || 'Short' }}"
+      },
+      "id": "post-youtube",
+      "name": "Post to YouTube",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [4000, 100],
+      "credentials": {
+        "blotatoApi": {
+          "id": "[YOUR_BLOTATO_CRED_ID]",
+          "name": "[YOUR_BLOTATO_CRED_NAME]"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "yt-platform",
+              "name": "platform",
+              "value": "youtube",
+              "type": "string"
+            },
+            {
+              "id": "yt-status",
+              "name": "status",
+              "value": "={{ $json.error ? 'failed' : 'success' }}",
+              "type": "string"
+            },
+            {
+              "id": "yt-error",
+              "name": "error_message",
+              "value": "={{ $json.error || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "yt-page-id",
+              "name": "master_page_id",
+              "value": "={{ $('Query Notion').item.json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "yt-title",
+              "name": "content_title",
+              "value": "={{ $('Query Notion').item.json.title || $('Query Notion').item.json.property_title || 'Unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "yt-media",
+              "name": "media_url",
+              "value": "={{ $('Blotato Media Upload').item.json.mediaUrl || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "yt-caption",
+              "name": "caption_used",
+              "value": "={{ $('Parse Enrichment').item.json.youtube_caption || $('Query Notion').item.json.property_caption }}",
+              "type": "string"
+            },
+            {
+              "id": "yt-exec",
+              "name": "workflow_execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "set-youtube-result",
+      "name": "Set YouTube Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [4250, 100]
+    },
+    {
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "id": "wait-after-youtube",
+      "name": "Wait After YouTube",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [4500, 100],
+      "webhookId": "wait-youtube"
+    },
+    {
+      "parameters": {
+        "operation": "createPost",
+        "platform": "threads",
+        "accountId": "[THREADS_ACCOUNT_ID]",
+        "caption": "={{ $('Parse Enrichment').item.json.threads_caption || $('Query Notion').item.json.property_threads_caption || $('Query Notion').item.json.property_caption }}",
+        "mediaId": "={{ $('Blotato Media Upload').item.json.mediaId }}"
+      },
+      "id": "post-threads",
+      "name": "Post to Threads",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [4750, 100],
+      "credentials": {
+        "blotatoApi": {
+          "id": "[YOUR_BLOTATO_CRED_ID]",
+          "name": "[YOUR_BLOTATO_CRED_NAME]"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "threads-platform",
+              "name": "platform",
+              "value": "threads",
+              "type": "string"
+            },
+            {
+              "id": "threads-status",
+              "name": "status",
+              "value": "={{ $json.error ? 'failed' : 'success' }}",
+              "type": "string"
+            },
+            {
+              "id": "threads-error",
+              "name": "error_message",
+              "value": "={{ $json.error || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "threads-page-id",
+              "name": "master_page_id",
+              "value": "={{ $('Query Notion').item.json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "threads-title",
+              "name": "content_title",
+              "value": "={{ $('Query Notion').item.json.title || $('Query Notion').item.json.property_title || 'Unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "threads-media",
+              "name": "media_url",
+              "value": "={{ $('Blotato Media Upload').item.json.mediaUrl || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "threads-caption",
+              "name": "caption_used",
+              "value": "={{ $('Parse Enrichment').item.json.threads_caption || $('Query Notion').item.json.property_caption }}",
+              "type": "string"
+            },
+            {
+              "id": "threads-exec",
+              "name": "workflow_execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "set-threads-result",
+      "name": "Set Threads Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [5000, 100]
+    },
+    {
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "id": "wait-after-threads",
+      "name": "Wait After Threads",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [5250, 100],
+      "webhookId": "wait-threads"
+    },
+    {
+      "parameters": {
+        "operation": "createPost",
+        "platform": "linkedin",
+        "accountId": "[LINKEDIN_ACCOUNT_ID]",
+        "caption": "={{ $('Parse Enrichment').item.json.linkedin_caption || $('Query Notion').item.json.property_linkedin_caption || $('Query Notion').item.json.property_caption }}",
+        "mediaId": "={{ $('Blotato Media Upload').item.json.mediaId }}"
+      },
+      "id": "post-linkedin",
+      "name": "Post to LinkedIn",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [5500, 100],
+      "credentials": {
+        "blotatoApi": {
+          "id": "[YOUR_BLOTATO_CRED_ID]",
+          "name": "[YOUR_BLOTATO_CRED_NAME]"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "li-platform",
+              "name": "platform",
+              "value": "linkedin",
+              "type": "string"
+            },
+            {
+              "id": "li-status",
+              "name": "status",
+              "value": "={{ $json.error ? 'failed' : 'success' }}",
+              "type": "string"
+            },
+            {
+              "id": "li-error",
+              "name": "error_message",
+              "value": "={{ $json.error || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "li-page-id",
+              "name": "master_page_id",
+              "value": "={{ $('Query Notion').item.json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "li-title",
+              "name": "content_title",
+              "value": "={{ $('Query Notion').item.json.title || $('Query Notion').item.json.property_title || 'Unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "li-media",
+              "name": "media_url",
+              "value": "={{ $('Blotato Media Upload').item.json.mediaUrl || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "li-caption",
+              "name": "caption_used",
+              "value": "={{ $('Parse Enrichment').item.json.linkedin_caption || $('Query Notion').item.json.property_caption }}",
+              "type": "string"
+            },
+            {
+              "id": "li-exec",
+              "name": "workflow_execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "set-linkedin-result",
+      "name": "Set LinkedIn Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [5750, 100]
+    },
+    {
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "id": "wait-after-linkedin",
+      "name": "Wait After LinkedIn",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [6000, 100],
+      "webhookId": "wait-linkedin"
+    },
+    {
+      "parameters": {
+        "operation": "createPost",
+        "platform": "x",
+        "accountId": "[TWITTER_ACCOUNT_ID]",
+        "caption": "={{ $('Parse Enrichment').item.json.twitter_caption || $('Query Notion').item.json.property_twitter_caption || $('Query Notion').item.json.property_caption }}",
+        "mediaId": "={{ $('Blotato Media Upload').item.json.mediaId }}"
+      },
+      "id": "post-twitter",
+      "name": "Post to X/Twitter",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [6250, 100],
+      "credentials": {
+        "blotatoApi": {
+          "id": "[YOUR_BLOTATO_CRED_ID]",
+          "name": "[YOUR_BLOTATO_CRED_NAME]"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "tw-platform",
+              "name": "platform",
+              "value": "twitter",
+              "type": "string"
+            },
+            {
+              "id": "tw-status",
+              "name": "status",
+              "value": "={{ $json.error ? 'failed' : 'success' }}",
+              "type": "string"
+            },
+            {
+              "id": "tw-error",
+              "name": "error_message",
+              "value": "={{ $json.error || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "tw-page-id",
+              "name": "master_page_id",
+              "value": "={{ $('Query Notion').item.json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "tw-title",
+              "name": "content_title",
+              "value": "={{ $('Query Notion').item.json.title || $('Query Notion').item.json.property_title || 'Unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "tw-media",
+              "name": "media_url",
+              "value": "={{ $('Blotato Media Upload').item.json.mediaUrl || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "tw-caption",
+              "name": "caption_used",
+              "value": "={{ $('Parse Enrichment').item.json.twitter_caption || $('Query Notion').item.json.property_caption }}",
+              "type": "string"
+            },
+            {
+              "id": "tw-exec",
+              "name": "workflow_execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "set-twitter-result",
+      "name": "Set Twitter Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [6500, 100]
+    },
+    {
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "id": "wait-after-twitter",
+      "name": "Wait After Twitter",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [6750, 100],
+      "webhookId": "wait-twitter"
+    },
+    {
+      "parameters": {
+        "operation": "createPost",
+        "platform": "facebook",
+        "accountId": "[FACEBOOK_ACCOUNT_ID]",
+        "facebookPageId": "[FACEBOOK_PAGE_ID]",
+        "caption": "={{ $('Parse Enrichment').item.json.facebook_caption || $('Query Notion').item.json.property_facebook_caption || $('Query Notion').item.json.property_caption }}",
+        "mediaId": "={{ $('Blotato Media Upload').item.json.mediaId }}"
+      },
+      "id": "post-facebook",
+      "name": "Post to Facebook",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [7000, 100],
+      "credentials": {
+        "blotatoApi": {
+          "id": "[YOUR_BLOTATO_CRED_ID]",
+          "name": "[YOUR_BLOTATO_CRED_NAME]"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "fb-platform",
+              "name": "platform",
+              "value": "facebook",
+              "type": "string"
+            },
+            {
+              "id": "fb-status",
+              "name": "status",
+              "value": "={{ $json.error ? 'failed' : 'success' }}",
+              "type": "string"
+            },
+            {
+              "id": "fb-error",
+              "name": "error_message",
+              "value": "={{ $json.error || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "fb-page-id",
+              "name": "master_page_id",
+              "value": "={{ $('Query Notion').item.json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "fb-title",
+              "name": "content_title",
+              "value": "={{ $('Query Notion').item.json.title || $('Query Notion').item.json.property_title || 'Unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "fb-media",
+              "name": "media_url",
+              "value": "={{ $('Blotato Media Upload').item.json.mediaUrl || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "fb-caption",
+              "name": "caption_used",
+              "value": "={{ $('Parse Enrichment').item.json.facebook_caption || $('Query Notion').item.json.property_caption }}",
+              "type": "string"
+            },
+            {
+              "id": "fb-exec",
+              "name": "workflow_execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "set-facebook-result",
+      "name": "Set Facebook Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [7250, 100]
+    },
+    {
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "id": "wait-after-facebook",
+      "name": "Wait After Facebook",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [7500, 100],
+      "webhookId": "wait-facebook"
+    },
+    {
+      "parameters": {
+        "operation": "createPost",
+        "platform": "pinterest",
+        "accountId": "[PINTEREST_ACCOUNT_ID]",
+        "pinterestBoardId": "[PINTEREST_BOARD_ID]",
+        "caption": "={{ $('Parse Enrichment').item.json.pinterest_caption || $('Query Notion').item.json.property_pinterest_caption || $('Query Notion').item.json.property_caption }}",
+        "mediaId": "={{ $('Blotato Media Upload').item.json.mediaId }}"
+      },
+      "id": "post-pinterest",
+      "name": "Post to Pinterest",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [7750, 100],
+      "credentials": {
+        "blotatoApi": {
+          "id": "[YOUR_BLOTATO_CRED_ID]",
+          "name": "[YOUR_BLOTATO_CRED_NAME]"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "pin-platform",
+              "name": "platform",
+              "value": "pinterest",
+              "type": "string"
+            },
+            {
+              "id": "pin-status",
+              "name": "status",
+              "value": "={{ $json.error ? 'failed' : 'success' }}",
+              "type": "string"
+            },
+            {
+              "id": "pin-error",
+              "name": "error_message",
+              "value": "={{ $json.error || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "pin-page-id",
+              "name": "master_page_id",
+              "value": "={{ $('Query Notion').item.json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "pin-title",
+              "name": "content_title",
+              "value": "={{ $('Query Notion').item.json.title || $('Query Notion').item.json.property_title || 'Unknown' }}",
+              "type": "string"
+            },
+            {
+              "id": "pin-media",
+              "name": "media_url",
+              "value": "={{ $('Blotato Media Upload').item.json.mediaUrl || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "pin-caption",
+              "name": "caption_used",
+              "value": "={{ $('Parse Enrichment').item.json.pinterest_caption || $('Query Notion').item.json.property_caption }}",
+              "type": "string"
+            },
+            {
+              "id": "pin-exec",
+              "name": "workflow_execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            }
+          ]
+        }
+      },
+      "id": "set-pinterest-result",
+      "name": "Set Pinterest Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [8000, 100]
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 9
+      },
+      "id": "merge-results",
+      "name": "Merge All Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [8250, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $input.all().map(i => i.json);\n\nfor (const result of results) {\n  const title = `${(result.platform || 'unknown').toUpperCase()} - ${(result.status || 'unknown').toUpperCase()} - ${result.content_title || 'Unknown'}`;\n  const isFailure = result.status === 'failed';\n  const now = new Date();\n  const retryAt = new Date(now.getTime() + 30 * 60 * 1000);\n\n  result._logEntry = {\n    title: title,\n    master_page_id: result.master_page_id || '',\n    platform: result.platform || '',\n    status: result.status || '',\n    error_message: result.error_message || '',\n    content_title: result.content_title || '',\n    media_url: result.media_url || '',\n    caption_used: (result.caption_used || '').substring(0, 200),\n    retry_count: 0,\n    retry_status: isFailure ? 'queued' : 'N/A',\n    next_retry_at: isFailure ? retryAt.toISOString() : '',\n    workflow_run_id: result.workflow_execution_id || '',\n    timestamp: now.toISOString()\n  };\n}\n\nreturn results.map(r => ({ json: r }));"
+      },
+      "id": "prepare-log-entries",
+      "name": "Prepare Log Entries",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [8500, 300]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "create",
+        "databaseId": {
+          "__rl": true,
+          "value": "[YOUR_ERROR_LOG_DB_ID]",
+          "mode": "id"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "title",
+              "title": "={{ $json._logEntry.title }}"
+            },
+            {
+              "key": "Master Page ID",
+              "richTextValue": "={{ $json._logEntry.master_page_id }}"
+            },
+            {
+              "key": "Platform",
+              "selectValue": "={{ $json._logEntry.platform }}"
+            },
+            {
+              "key": "Status",
+              "selectValue": "={{ $json._logEntry.status }}"
+            },
+            {
+              "key": "Error Message",
+              "richTextValue": "={{ $json._logEntry.error_message }}"
+            },
+            {
+              "key": "Content Title",
+              "richTextValue": "={{ $json._logEntry.content_title }}"
+            },
+            {
+              "key": "Media URL",
+              "urlValue": "={{ $json._logEntry.media_url }}"
+            },
+            {
+              "key": "Caption Used",
+              "richTextValue": "={{ $json._logEntry.caption_used }}"
+            },
+            {
+              "key": "Retry Count",
+              "numberValue": 0
+            },
+            {
+              "key": "Retry Status",
+              "selectValue": "={{ $json._logEntry.retry_status }}"
+            },
+            {
+              "key": "Next Retry At",
+              "dateValue": "={{ $json._logEntry.next_retry_at }}"
+            },
+            {
+              "key": "Workflow Run ID",
+              "richTextValue": "={{ $json._logEntry.workflow_run_id }}"
+            },
+            {
+              "key": "Timestamp",
+              "dateValue": "={{ $json._logEntry.timestamp }}"
+            }
+          ]
+        }
+      },
+      "id": "create-platform-logs",
+      "name": "Create Platform Logs",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [8750, 300],
+      "credentials": {
+        "notionApi": {
+          "id": "[YOUR_NOTION_CRED_ID]",
+          "name": "[YOUR_NOTION_CRED_NAME]"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $input.all().map(i => i.json);\n\nconst successes = results.filter(r => r.status === 'success' || r._logEntry?.status === 'success');\nconst failures = results.filter(r => r.status === 'failed' || r._logEntry?.status === 'failed');\n\nconst failedPlatforms = failures.map(r => r.platform || r._logEntry?.platform).filter(Boolean);\nconst successPlatforms = successes.map(r => r.platform || r._logEntry?.platform).filter(Boolean);\n\nlet status;\nif (failures.length === 0) {\n  status = 'Posted';\n} else if (successes.length === 0) {\n  status = 'Failed';\n} else {\n  status = `Partial - ${failedPlatforms.join(', ')} failed`;\n}\n\nconst platformResults = {};\nfor (const r of results) {\n  const p = r.platform || r._logEntry?.platform;\n  if (p) {\n    platformResults[p] = {\n      status: r.status || r._logEntry?.status,\n      error: r.error_message || r._logEntry?.error_message || null\n    };\n  }\n}\n\nreturn [{\n  json: {\n    calculated_status: status,\n    platform_results: JSON.stringify(platformResults),\n    failed_platforms: failedPlatforms,\n    success_platforms: successPlatforms,\n    has_failures: failures.length > 0,\n    master_page_id: results[0]?.master_page_id || results[0]?._logEntry?.master_page_id || '',\n    content_title: results[0]?.content_title || results[0]?._logEntry?.content_title || '',\n    all_results: results,\n    failure_details: failures.map(f => ({\n      platform: f.platform || f._logEntry?.platform,\n      error: f.error_message || f._logEntry?.error_message\n    }))\n  }\n}];"
+      },
+      "id": "aggregate-status",
+      "name": "Aggregate Status Calculator",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [9000, 300]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": {
+          "__rl": true,
+          "value": "={{ $json.master_page_id }}",
+          "mode": "id"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Status",
+              "selectValue": "={{ $json.calculated_status }}"
+            },
+            {
+              "key": "posted_at",
+              "dateValue": "={{ $now.toISO() }}"
+            },
+            {
+              "key": "platform_results",
+              "richTextValue": "={{ $json.platform_results }}"
+            },
+            {
+              "key": "processing_started",
+              "dateValue": ""
+            }
+          ]
+        }
+      },
+      "id": "update-master-page",
+      "name": "Update Master Notion Page",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [9250, 300],
+      "credentials": {
+        "notionApi": {
+          "id": "[YOUR_NOTION_CRED_ID]",
+          "name": "[YOUR_NOTION_CRED_NAME]"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-failures",
+              "leftValue": "={{ $json.has_failures }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-has-failures",
+      "name": "IF - Has Failures",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [9500, 300]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "[YOUR_SLACK_WEBHOOK_URL]",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"blocks\": [\n    {\n      \"type\": \"header\",\n      \"text\": {\n        \"type\": \"plain_text\",\n        \"text\": \":rotating_light: Social Media Posting Failures\"\n      }\n    },\n    {\n      \"type\": \"section\",\n      \"fields\": [\n        {\n          \"type\": \"mrkdwn\",\n          \"text\": \"*Content:*\\n{{ $json.content_title }}\"\n        },\n        {\n          \"type\": \"mrkdwn\",\n          \"text\": \"*Status:*\\n{{ $json.calculated_status }}\"\n        }\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": \"*Failed Platforms:*\\n{{ $json.failed_platforms.join(', ') }}\\n\\n*Error Details:*\\n{{ $json.failure_details.map(f => '• ' + f.platform + ': ' + f.error).join('\\n') }}\"\n      }\n    },\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": \":arrows_counterclockwise: Retries have been queued (30 min intervals, max 3 attempts)\\n\\n<https://www.notion.so/{{ $json.master_page_id.replace(/-/g, '') }}|View in Notion>\"\n      }\n    }\n  ]\n}"
+      },
+      "id": "slack-failure-notification",
+      "name": "Slack - Failure Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [9750, 200]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Query Notion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Notion": {
+      "main": [
+        [
+          {
+            "node": "IF - Has Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Has Content": {
+      "main": [
+        [
+          {
+            "node": "Set Processing Lock",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Set Processing Lock": {
+      "main": [
+        [
+          {
+            "node": "Content Validation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Content Validation": {
+      "main": [
+        [
+          {
+            "node": "Claude Caption Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Invalid to Notion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Invalid to Notion": {
+      "main": [
+        [
+          {
+            "node": "Slack - Validation Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Caption Enrichment": {
+      "main": [
+        [
+          {
+            "node": "Parse Enrichment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Enrichment": {
+      "main": [
+        [
+          {
+            "node": "Update Enriched Captions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Enriched Captions": {
+      "main": [
+        [
+          {
+            "node": "Blotato Media Upload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Blotato Media Upload": {
+      "main": [
+        [
+          {
+            "node": "IF - Upload Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Upload Success": {
+      "main": [
+        [
+          {
+            "node": "Post to TikTok",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark All Platforms Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark All Platforms Failed": {
+      "main": [
+        [
+          {
+            "node": "Merge All Results",
+            "type": "main",
+            "index": 8
+          }
+        ]
+      ]
+    },
+    "Post to TikTok": {
+      "main": [
+        [
+          {
+            "node": "Set TikTok Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set TikTok Result": {
+      "main": [
+        [
+          {
+            "node": "Merge All Results",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Wait After TikTok",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait After TikTok": {
+      "main": [
+        [
+          {
+            "node": "Post to Instagram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to Instagram": {
+      "main": [
+        [
+          {
+            "node": "Set Instagram Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Instagram Result": {
+      "main": [
+        [
+          {
+            "node": "Merge All Results",
+            "type": "main",
+            "index": 1
+          },
+          {
+            "node": "Wait After Instagram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait After Instagram": {
+      "main": [
+        [
+          {
+            "node": "Post to YouTube",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to YouTube": {
+      "main": [
+        [
+          {
+            "node": "Set YouTube Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set YouTube Result": {
+      "main": [
+        [
+          {
+            "node": "Merge All Results",
+            "type": "main",
+            "index": 2
+          },
+          {
+            "node": "Wait After YouTube",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait After YouTube": {
+      "main": [
+        [
+          {
+            "node": "Post to Threads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to Threads": {
+      "main": [
+        [
+          {
+            "node": "Set Threads Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Threads Result": {
+      "main": [
+        [
+          {
+            "node": "Merge All Results",
+            "type": "main",
+            "index": 3
+          },
+          {
+            "node": "Wait After Threads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait After Threads": {
+      "main": [
+        [
+          {
+            "node": "Post to LinkedIn",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to LinkedIn": {
+      "main": [
+        [
+          {
+            "node": "Set LinkedIn Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set LinkedIn Result": {
+      "main": [
+        [
+          {
+            "node": "Merge All Results",
+            "type": "main",
+            "index": 4
+          },
+          {
+            "node": "Wait After LinkedIn",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait After LinkedIn": {
+      "main": [
+        [
+          {
+            "node": "Post to X/Twitter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to X/Twitter": {
+      "main": [
+        [
+          {
+            "node": "Set Twitter Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Twitter Result": {
+      "main": [
+        [
+          {
+            "node": "Merge All Results",
+            "type": "main",
+            "index": 5
+          },
+          {
+            "node": "Wait After Twitter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait After Twitter": {
+      "main": [
+        [
+          {
+            "node": "Post to Facebook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to Facebook": {
+      "main": [
+        [
+          {
+            "node": "Set Facebook Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Facebook Result": {
+      "main": [
+        [
+          {
+            "node": "Merge All Results",
+            "type": "main",
+            "index": 6
+          },
+          {
+            "node": "Wait After Facebook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait After Facebook": {
+      "main": [
+        [
+          {
+            "node": "Post to Pinterest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Post to Pinterest": {
+      "main": [
+        [
+          {
+            "node": "Set Pinterest Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Pinterest Result": {
+      "main": [
+        [
+          {
+            "node": "Merge All Results",
+            "type": "main",
+            "index": 7
+          }
+        ]
+      ]
+    },
+    "Merge All Results": {
+      "main": [
+        [
+          {
+            "node": "Prepare Log Entries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Log Entries": {
+      "main": [
+        [
+          {
+            "node": "Create Platform Logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Platform Logs": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Status Calculator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Status Calculator": {
+      "main": [
+        [
+          {
+            "node": "Update Master Notion Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Master Notion Page": {
+      "main": [
+        [
+          {
+            "node": "IF - Has Failures",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Has Failures": {
+      "main": [
+        [
+          {
+            "node": "Slack - Failure Notification",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2026-02-13T00:00:00.000Z",
+  "versionId": "1"
+}
