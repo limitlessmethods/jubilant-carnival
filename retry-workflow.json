@@ -1,0 +1,1168 @@
+{
+  "name": "Pro Short-Form Auto-Poster v2 - Retry Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "retry-schedule",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 300]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": {
+          "__rl": true,
+          "value": "[YOUR_ERROR_LOG_DB_ID]",
+          "mode": "id"
+        },
+        "returnAll": false,
+        "limit": 10,
+        "filterType": "formula",
+        "filterJson": "{\n  \"and\": [\n    {\n      \"property\": \"Retry Status\",\n      \"select\": {\n        \"equals\": \"queued\"\n      }\n    },\n    {\n      \"property\": \"Next Retry At\",\n      \"date\": {\n        \"on_or_before\": \"{{ $now.toISO() }}\"\n      }\n    },\n    {\n      \"property\": \"Retry Count\",\n      \"number\": {\n        \"less_than\": 3\n      }\n    }\n  ]\n}",
+        "sort": {
+          "sortValues": [
+            {
+              "key": "Next Retry At",
+              "direction": "ascending"
+            }
+          ]
+        }
+      },
+      "id": "query-error-log",
+      "name": "Query Error Log",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [250, 300],
+      "credentials": {
+        "notionApi": {
+          "id": "[YOUR_NOTION_CRED_ID]",
+          "name": "[YOUR_NOTION_CRED_NAME]"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-retries",
+              "leftValue": "={{ $json }}",
+              "rightValue": "",
+              "operator": {
+                "type": "object",
+                "operation": "notEmpty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-has-retries",
+      "name": "IF - Has Retries",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "batchSize": 1,
+        "options": {}
+      },
+      "id": "split-batches",
+      "name": "Process One at a Time",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [750, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst props = item.json;\n\n// Extract fields from the error log entry\nconst masterPageId = props.properties?.['Master Page ID']?.rich_text?.[0]?.plain_text \n  || props.property_master_page_id \n  || props.master_page_id \n  || '';\nconst platform = props.properties?.Platform?.select?.name \n  || props.property_platform \n  || props.platform \n  || '';\nconst mediaUrl = props.properties?.['Media URL']?.url \n  || props.property_media_url \n  || props.media_url \n  || '';\nconst captionUsed = props.properties?.['Caption Used']?.rich_text?.[0]?.plain_text \n  || props.property_caption_used \n  || props.caption_used \n  || '';\nconst retryCount = props.properties?.['Retry Count']?.number \n  || props.property_retry_count \n  || props.retry_count \n  || 0;\nconst errorLogId = props.id || '';\nconst contentTitle = props.properties?.['Content Title']?.rich_text?.[0]?.plain_text \n  || props.property_content_title \n  || props.content_title \n  || '';\n\nreturn [{\n  json: {\n    master_page_id: masterPageId,\n    platform: platform,\n    media_url: mediaUrl,\n    caption_used: captionUsed,\n    retry_count: retryCount,\n    error_log_id: errorLogId,\n    content_title: contentTitle\n  }\n}];"
+      },
+      "id": "extract-retry-data",
+      "name": "Extract Retry Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1000, 200]
+    },
+    {
+      "parameters": {
+        "operation": "uploadMedia",
+        "mediaUrl": "={{ $json.media_url }}"
+      },
+      "id": "retry-upload",
+      "name": "Re-upload Media",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [1250, 200],
+      "credentials": {
+        "blotatoApi": {
+          "id": "[YOUR_BLOTATO_CRED_ID]",
+          "name": "[YOUR_BLOTATO_CRED_NAME]"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "upload-ok",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-retry-upload-ok",
+      "name": "IF - Re-upload Success",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1500, 200]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Extract Retry Data').item.json.platform }}",
+                    "rightValue": "tiktok",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "tiktok"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Extract Retry Data').item.json.platform }}",
+                    "rightValue": "instagram",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "instagram"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Extract Retry Data').item.json.platform }}",
+                    "rightValue": "youtube",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "youtube"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Extract Retry Data').item.json.platform }}",
+                    "rightValue": "threads",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "threads"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Extract Retry Data').item.json.platform }}",
+                    "rightValue": "linkedin",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "linkedin"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Extract Retry Data').item.json.platform }}",
+                    "rightValue": "twitter",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "twitter"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Extract Retry Data').item.json.platform }}",
+                    "rightValue": "facebook",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "facebook"
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Extract Retry Data').item.json.platform }}",
+                    "rightValue": "pinterest",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "pinterest"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "none"
+        }
+      },
+      "id": "platform-switch",
+      "name": "Platform Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [1750, 100]
+    },
+    {
+      "parameters": {
+        "operation": "createPost",
+        "platform": "tiktok",
+        "accountId": "[TIKTOK_ACCOUNT_ID]",
+        "caption": "={{ $('Extract Retry Data').item.json.caption_used }}",
+        "mediaId": "={{ $('Re-upload Media').item.json.mediaId }}"
+      },
+      "id": "retry-tiktok",
+      "name": "Retry TikTok",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [2050, -300],
+      "credentials": {
+        "blotatoApi": {
+          "id": "[YOUR_BLOTATO_CRED_ID]",
+          "name": "[YOUR_BLOTATO_CRED_NAME]"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "createPost",
+        "platform": "instagram",
+        "accountId": "[INSTAGRAM_ACCOUNT_ID]",
+        "caption": "={{ $('Extract Retry Data').item.json.caption_used }}",
+        "mediaId": "={{ $('Re-upload Media').item.json.mediaId }}"
+      },
+      "id": "retry-instagram",
+      "name": "Retry Instagram",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [2050, -150],
+      "credentials": {
+        "blotatoApi": {
+          "id": "[YOUR_BLOTATO_CRED_ID]",
+          "name": "[YOUR_BLOTATO_CRED_NAME]"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "createPost",
+        "platform": "youtube",
+        "accountId": "[YOUTUBE_ACCOUNT_ID]",
+        "caption": "={{ $('Extract Retry Data').item.json.caption_used }}",
+        "mediaId": "={{ $('Re-upload Media').item.json.mediaId }}",
+        "postCreateYoutubeOptionTitle": "={{ $('Extract Retry Data').item.json.content_title || 'Short' }}"
+      },
+      "id": "retry-youtube",
+      "name": "Retry YouTube",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [2050, 0],
+      "credentials": {
+        "blotatoApi": {
+          "id": "[YOUR_BLOTATO_CRED_ID]",
+          "name": "[YOUR_BLOTATO_CRED_NAME]"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "createPost",
+        "platform": "threads",
+        "accountId": "[THREADS_ACCOUNT_ID]",
+        "caption": "={{ $('Extract Retry Data').item.json.caption_used }}",
+        "mediaId": "={{ $('Re-upload Media').item.json.mediaId }}"
+      },
+      "id": "retry-threads",
+      "name": "Retry Threads",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [2050, 150],
+      "credentials": {
+        "blotatoApi": {
+          "id": "[YOUR_BLOTATO_CRED_ID]",
+          "name": "[YOUR_BLOTATO_CRED_NAME]"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "createPost",
+        "platform": "linkedin",
+        "accountId": "[LINKEDIN_ACCOUNT_ID]",
+        "caption": "={{ $('Extract Retry Data').item.json.caption_used }}",
+        "mediaId": "={{ $('Re-upload Media').item.json.mediaId }}"
+      },
+      "id": "retry-linkedin",
+      "name": "Retry LinkedIn",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [2050, 300],
+      "credentials": {
+        "blotatoApi": {
+          "id": "[YOUR_BLOTATO_CRED_ID]",
+          "name": "[YOUR_BLOTATO_CRED_NAME]"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "createPost",
+        "platform": "x",
+        "accountId": "[TWITTER_ACCOUNT_ID]",
+        "caption": "={{ $('Extract Retry Data').item.json.caption_used }}",
+        "mediaId": "={{ $('Re-upload Media').item.json.mediaId }}"
+      },
+      "id": "retry-twitter",
+      "name": "Retry X/Twitter",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [2050, 450],
+      "credentials": {
+        "blotatoApi": {
+          "id": "[YOUR_BLOTATO_CRED_ID]",
+          "name": "[YOUR_BLOTATO_CRED_NAME]"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "createPost",
+        "platform": "facebook",
+        "accountId": "[FACEBOOK_ACCOUNT_ID]",
+        "facebookPageId": "[FACEBOOK_PAGE_ID]",
+        "caption": "={{ $('Extract Retry Data').item.json.caption_used }}",
+        "mediaId": "={{ $('Re-upload Media').item.json.mediaId }}"
+      },
+      "id": "retry-facebook",
+      "name": "Retry Facebook",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [2050, 600],
+      "credentials": {
+        "blotatoApi": {
+          "id": "[YOUR_BLOTATO_CRED_ID]",
+          "name": "[YOUR_BLOTATO_CRED_NAME]"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "operation": "createPost",
+        "platform": "pinterest",
+        "accountId": "[PINTEREST_ACCOUNT_ID]",
+        "pinterestBoardId": "[PINTEREST_BOARD_ID]",
+        "caption": "={{ $('Extract Retry Data').item.json.caption_used }}",
+        "mediaId": "={{ $('Re-upload Media').item.json.mediaId }}"
+      },
+      "id": "retry-pinterest",
+      "name": "Retry Pinterest",
+      "type": "@blotato/n8n-nodes-blotato.blotato",
+      "typeVersion": 2,
+      "position": [2050, 750],
+      "credentials": {
+        "blotatoApi": {
+          "id": "[YOUR_BLOTATO_CRED_ID]",
+          "name": "[YOUR_BLOTATO_CRED_NAME]"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "mode": "append",
+        "numberInputs": 8
+      },
+      "id": "merge-retry-results",
+      "name": "Merge Retry Results",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [2350, 200]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst retryData = $('Extract Retry Data').first().json;\nconst postResult = item.json;\n\nconst isSuccess = !postResult.error;\nconst currentRetryCount = (retryData.retry_count || 0) + 1;\n\nlet retryStatus;\nlet nextRetryAt = '';\n\nif (isSuccess) {\n  retryStatus = 'succeeded';\n} else if (currentRetryCount >= 3) {\n  retryStatus = 'permanent_failure';\n} else {\n  retryStatus = 'queued';\n  const now = new Date();\n  // Exponential backoff: retry 1 = +30min, retry 2 = +2hr, retry 3 = +8hr\n  const backoffMinutes = [30, 120, 480];\n  const delayMs = (backoffMinutes[currentRetryCount - 1] || 480) * 60 * 1000;\n  nextRetryAt = new Date(now.getTime() + delayMs).toISOString();\n}\n\nreturn [{\n  json: {\n    error_log_id: retryData.error_log_id,\n    master_page_id: retryData.master_page_id,\n    platform: retryData.platform,\n    retry_count: currentRetryCount,\n    retry_status: retryStatus,\n    next_retry_at: nextRetryAt,\n    is_success: isSuccess,\n    is_permanent_failure: retryStatus === 'permanent_failure',\n    new_status: isSuccess ? 'success' : 'failed',\n    error_message: postResult.error || '',\n    content_title: retryData.content_title || ''\n  }\n}];"
+      },
+      "id": "calculate-retry-result",
+      "name": "Calculate Retry Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2600, 200]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": {
+          "__rl": true,
+          "value": "={{ $json.error_log_id }}",
+          "mode": "id"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Retry Count",
+              "numberValue": "={{ $json.retry_count }}"
+            },
+            {
+              "key": "Retry Status",
+              "selectValue": "={{ $json.retry_status }}"
+            },
+            {
+              "key": "Status",
+              "selectValue": "={{ $json.new_status }}"
+            },
+            {
+              "key": "Next Retry At",
+              "dateValue": "={{ $json.next_retry_at }}"
+            },
+            {
+              "key": "Error Message",
+              "richTextValue": "={{ $json.error_message }}"
+            }
+          ]
+        }
+      },
+      "id": "update-error-log",
+      "name": "Update Error Log Entry",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [2850, 200],
+      "credentials": {
+        "notionApi": {
+          "id": "[YOUR_NOTION_CRED_ID]",
+          "name": "[YOUR_NOTION_CRED_NAME]"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\nconst masterPageId = item.master_page_id;\n\nif (!masterPageId) {\n  return [{ json: { skip: true } }];\n}\n\n// We need to check all error log entries for this master page\n// to recalculate the overall status\nreturn [{\n  json: {\n    master_page_id: masterPageId,\n    platform: item.platform,\n    is_success: item.is_success,\n    retry_status: item.retry_status,\n    is_permanent_failure: item.is_permanent_failure,\n    content_title: item.content_title\n  }\n}];"
+      },
+      "id": "prepare-master-update",
+      "name": "Prepare Master Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3100, 200]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "getAll",
+        "databaseId": {
+          "__rl": true,
+          "value": "[YOUR_ERROR_LOG_DB_ID]",
+          "mode": "id"
+        },
+        "returnAll": true,
+        "filterType": "formula",
+        "filterJson": "={\n  \"property\": \"Master Page ID\",\n  \"rich_text\": {\n    \"equals\": \"{{ $json.master_page_id }}\"\n  }\n}"
+      },
+      "id": "fetch-all-platform-statuses",
+      "name": "Fetch All Platform Statuses",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [3350, 200],
+      "credentials": {
+        "notionApi": {
+          "id": "[YOUR_NOTION_CRED_ID]",
+          "name": "[YOUR_NOTION_CRED_NAME]"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const allEntries = $input.all().map(i => i.json);\nconst masterPageId = $('Prepare Master Update').first().json.master_page_id;\n\nconst platformStatuses = {};\nfor (const entry of allEntries) {\n  const platform = entry.properties?.Platform?.select?.name || entry.platform || '';\n  const status = entry.properties?.Status?.select?.name || entry.status || '';\n  const retryStatus = entry.properties?.['Retry Status']?.select?.name || entry.retry_status || '';\n  \n  if (platform) {\n    // Use the most recent entry for each platform\n    // succeeded retry or original success = success\n    if (status === 'success' || retryStatus === 'succeeded') {\n      platformStatuses[platform] = 'success';\n    } else if (!platformStatuses[platform]) {\n      platformStatuses[platform] = 'failed';\n    }\n  }\n}\n\nconst allPlatforms = Object.keys(platformStatuses);\nconst failedPlatforms = allPlatforms.filter(p => platformStatuses[p] === 'failed');\nconst successPlatforms = allPlatforms.filter(p => platformStatuses[p] === 'success');\n\nlet calculatedStatus;\nif (failedPlatforms.length === 0) {\n  calculatedStatus = 'Posted';\n} else if (successPlatforms.length === 0) {\n  calculatedStatus = 'Failed';\n} else {\n  calculatedStatus = `Partial - ${failedPlatforms.join(', ')} failed`;\n}\n\nreturn [{\n  json: {\n    master_page_id: masterPageId,\n    calculated_status: calculatedStatus,\n    platform_results: JSON.stringify(platformStatuses),\n    all_succeeded: failedPlatforms.length === 0\n  }\n}];"
+      },
+      "id": "recalculate-status",
+      "name": "Recalculate Overall Status",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3600, 200]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": {
+          "__rl": true,
+          "value": "={{ $json.master_page_id }}",
+          "mode": "id"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Status",
+              "selectValue": "={{ $json.calculated_status }}"
+            },
+            {
+              "key": "platform_results",
+              "richTextValue": "={{ $json.platform_results }}"
+            }
+          ]
+        }
+      },
+      "id": "update-master-page-retry",
+      "name": "Update Master Page",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [3850, 200],
+      "credentials": {
+        "notionApi": {
+          "id": "[YOUR_NOTION_CRED_ID]",
+          "name": "[YOUR_NOTION_CRED_NAME]"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "is-perm-failure",
+              "leftValue": "={{ $('Calculate Retry Result').item.json.is_permanent_failure }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-permanent-failure",
+      "name": "IF - Permanent Failure",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [4100, 200]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "[YOUR_SLACK_WEBHOOK_URL]",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"blocks\": [\n    {\n      \"type\": \"header\",\n      \"text\": {\n        \"type\": \"plain_text\",\n        \"text\": \":x: Permanent Posting Failure - Manual Action Required\"\n      }\n    },\n    {\n      \"type\": \"section\",\n      \"fields\": [\n        {\n          \"type\": \"mrkdwn\",\n          \"text\": \"*Content:*\\n{{ $('Calculate Retry Result').item.json.content_title }}\"\n        },\n        {\n          \"type\": \"mrkdwn\",\n          \"text\": \"*Platform:*\\n{{ $('Calculate Retry Result').item.json.platform }}\"\n        }\n      ]\n    },\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": \":warning: *3 retry attempts exhausted.* This post requires manual intervention.\\n\\n*Last Error:* {{ $('Calculate Retry Result').item.json.error_message }}\\n\\n<https://www.notion.so/{{ $('Calculate Retry Result').item.json.master_page_id.replace(/-/g, '') }}|View in Notion>\"\n      }\n    }\n  ]\n}"
+      },
+      "id": "slack-permanent-failure",
+      "name": "Slack - Permanent Failure Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4350, 100]
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first();\nconst retryData = item.json;\n\n// Mark all platforms as failed since upload failed\nconst currentRetryCount = ($('Extract Retry Data').first().json.retry_count || 0) + 1;\n\nlet retryStatus;\nlet nextRetryAt = '';\n\nif (currentRetryCount >= 3) {\n  retryStatus = 'permanent_failure';\n} else {\n  retryStatus = 'queued';\n  const now = new Date();\n  const backoffMinutes = [30, 120, 480];\n  const delayMs = (backoffMinutes[currentRetryCount - 1] || 480) * 60 * 1000;\n  nextRetryAt = new Date(now.getTime() + delayMs).toISOString();\n}\n\nreturn [{\n  json: {\n    error_log_id: $('Extract Retry Data').first().json.error_log_id,\n    master_page_id: $('Extract Retry Data').first().json.master_page_id,\n    platform: $('Extract Retry Data').first().json.platform,\n    retry_count: currentRetryCount,\n    retry_status: retryStatus,\n    next_retry_at: nextRetryAt,\n    is_success: false,\n    is_permanent_failure: retryStatus === 'permanent_failure',\n    new_status: 'failed',\n    error_message: 'Media re-upload failed: ' + (retryData.error || 'Unknown error'),\n    content_title: $('Extract Retry Data').first().json.content_title || ''\n  }\n}];"
+      },
+      "id": "handle-reupload-failure",
+      "name": "Handle Re-upload Failure",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1750, 400]
+    },
+    {
+      "parameters": {
+        "resource": "databasePage",
+        "operation": "update",
+        "pageId": {
+          "__rl": true,
+          "value": "={{ $json.error_log_id }}",
+          "mode": "id"
+        },
+        "propertiesUi": {
+          "propertyValues": [
+            {
+              "key": "Retry Count",
+              "numberValue": "={{ $json.retry_count }}"
+            },
+            {
+              "key": "Retry Status",
+              "selectValue": "={{ $json.retry_status }}"
+            },
+            {
+              "key": "Next Retry At",
+              "dateValue": "={{ $json.next_retry_at }}"
+            },
+            {
+              "key": "Error Message",
+              "richTextValue": "={{ $json.error_message }}"
+            }
+          ]
+        }
+      },
+      "id": "update-error-log-upload-fail",
+      "name": "Update Error Log - Upload Failed",
+      "type": "n8n-nodes-base.notion",
+      "typeVersion": 2.2,
+      "position": [2050, 400],
+      "credentials": {
+        "notionApi": {
+          "id": "[YOUR_NOTION_CRED_ID]",
+          "name": "[YOUR_NOTION_CRED_NAME]"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "is-perm-failure-upload",
+              "leftValue": "={{ $json.is_permanent_failure }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-perm-failure-upload",
+      "name": "IF - Permanent Failure (Upload)",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [2350, 400]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "[YOUR_SLACK_WEBHOOK_URL]",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"blocks\": [\n    {\n      \"type\": \"header\",\n      \"text\": {\n        \"type\": \"plain_text\",\n        \"text\": \":x: Permanent Upload Failure - Manual Action Required\"\n      }\n    },\n    {\n      \"type\": \"section\",\n      \"text\": {\n        \"type\": \"mrkdwn\",\n        \"text\": \"*Platform:* {{ $json.platform }}\\n*Content:* {{ $json.content_title }}\\n*Error:* {{ $json.error_message }}\\n\\nMedia upload has failed 3 times. Check the media URL and re-queue manually.\"\n      }\n    }\n  ]\n}"
+      },
+      "id": "slack-upload-perm-failure",
+      "name": "Slack - Upload Permanent Failure",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2600, 350]
+    },
+    {
+      "parameters": {},
+      "id": "loop-back",
+      "name": "Loop Back",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [4350, 300]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Query Error Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Error Log": {
+      "main": [
+        [
+          {
+            "node": "IF - Has Retries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Has Retries": {
+      "main": [
+        [
+          {
+            "node": "Process One at a Time",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Process One at a Time": {
+      "main": [
+        [
+          {
+            "node": "Extract Retry Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Extract Retry Data": {
+      "main": [
+        [
+          {
+            "node": "Re-upload Media",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Re-upload Media": {
+      "main": [
+        [
+          {
+            "node": "IF - Re-upload Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Re-upload Success": {
+      "main": [
+        [
+          {
+            "node": "Platform Router",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Handle Re-upload Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Platform Router": {
+      "main": [
+        [
+          {
+            "node": "Retry TikTok",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retry Instagram",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retry YouTube",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retry Threads",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retry LinkedIn",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retry X/Twitter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retry Facebook",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retry Pinterest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry TikTok": {
+      "main": [
+        [
+          {
+            "node": "Merge Retry Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retry Instagram": {
+      "main": [
+        [
+          {
+            "node": "Merge Retry Results",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Retry YouTube": {
+      "main": [
+        [
+          {
+            "node": "Merge Retry Results",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Retry Threads": {
+      "main": [
+        [
+          {
+            "node": "Merge Retry Results",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Retry LinkedIn": {
+      "main": [
+        [
+          {
+            "node": "Merge Retry Results",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "Retry X/Twitter": {
+      "main": [
+        [
+          {
+            "node": "Merge Retry Results",
+            "type": "main",
+            "index": 5
+          }
+        ]
+      ]
+    },
+    "Retry Facebook": {
+      "main": [
+        [
+          {
+            "node": "Merge Retry Results",
+            "type": "main",
+            "index": 6
+          }
+        ]
+      ]
+    },
+    "Retry Pinterest": {
+      "main": [
+        [
+          {
+            "node": "Merge Retry Results",
+            "type": "main",
+            "index": 7
+          }
+        ]
+      ]
+    },
+    "Merge Retry Results": {
+      "main": [
+        [
+          {
+            "node": "Calculate Retry Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Retry Result": {
+      "main": [
+        [
+          {
+            "node": "Update Error Log Entry",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Error Log Entry": {
+      "main": [
+        [
+          {
+            "node": "Prepare Master Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Master Update": {
+      "main": [
+        [
+          {
+            "node": "Fetch All Platform Statuses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch All Platform Statuses": {
+      "main": [
+        [
+          {
+            "node": "Recalculate Overall Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recalculate Overall Status": {
+      "main": [
+        [
+          {
+            "node": "Update Master Page",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Master Page": {
+      "main": [
+        [
+          {
+            "node": "IF - Permanent Failure",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Permanent Failure": {
+      "main": [
+        [
+          {
+            "node": "Slack - Permanent Failure Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Back",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack - Permanent Failure Alert": {
+      "main": [
+        [
+          {
+            "node": "Loop Back",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Back": {
+      "main": [
+        [
+          {
+            "node": "Process One at a Time",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Re-upload Failure": {
+      "main": [
+        [
+          {
+            "node": "Update Error Log - Upload Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Error Log - Upload Failed": {
+      "main": [
+        [
+          {
+            "node": "IF - Permanent Failure (Upload)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF - Permanent Failure (Upload)": {
+      "main": [
+        [
+          {
+            "node": "Slack - Upload Permanent Failure",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Back",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Slack - Upload Permanent Failure": {
+      "main": [
+        [
+          {
+            "node": "Loop Back",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2026-02-13T00:00:00.000Z",
+  "versionId": "1"
+}
