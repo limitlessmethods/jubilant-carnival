@@ -1,0 +1,1196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TropeMatch - Book Discovery & Community</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --navy: #1B2A4A;
+            --purple: #7C5CFC;
+            --lavender: #C4B5FD;
+            --light-lavender: #E9D5FF;
+            --white: #FFFFFF;
+            --gray: #F3F4F6;
+            --text: #1F2937;
+            --light-text: #6B7280;
+        }
+
+        body {
+            font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--white);
+            color: var(--text);
+            line-height: 1.6;
+        }
+
+        /* Layout */
+        .app-container {
+            display: flex;
+            height: 100vh;
+            background: linear-gradient(135deg, var(--white) 0%, #F5F3FF 100%);
+        }
+
+        .sidebar {
+            width: 280px;
+            background: var(--white);
+            border-right: 1px solid var(--light-lavender);
+            padding: 2rem 1.5rem;
+            overflow-y: auto;
+            box-shadow: 2px 0 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 2rem;
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--navy);
+        }
+
+        .logo-heart {
+            color: var(--purple);
+            font-size: 1.5rem;
+        }
+
+        .nav-menu {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .nav-item {
+            padding: 0.75rem 1rem;
+            border-radius: 0.75rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            color: var(--light-text);
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .nav-item:hover {
+            background: var(--light-lavender);
+            color: var(--purple);
+        }
+
+        .nav-item.active {
+            background: linear-gradient(135deg, var(--lavender) 0%, var(--light-lavender) 100%);
+            color: var(--navy);
+            font-weight: 600;
+        }
+
+        .nav-icon {
+            font-size: 1.25rem;
+        }
+
+        .main-content {
+            flex: 1;
+            padding: 2rem;
+            overflow-y: auto;
+        }
+
+        /* Page Headers */
+        .page-header {
+            margin-bottom: 2rem;
+        }
+
+        .page-title {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 0.5rem;
+        }
+
+        .page-subtitle {
+            color: var(--light-text);
+            font-size: 0.95rem;
+        }
+
+        /* Cards & Containers */
+        .card {
+            background: var(--white);
+            border-radius: 1rem;
+            padding: 1.5rem;
+            border: 1px solid var(--light-lavender);
+            transition: all 0.3s ease;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .card:hover {
+            box-shadow: 0 8px 20px rgba(124, 92, 252, 0.15);
+            border-color: var(--lavender);
+            transform: translateY(-2px);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+
+        /* Trope Tags */
+        .trope-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-top: 1.5rem;
+        }
+
+        .trope-tag {
+            padding: 0.75rem 1rem;
+            border-radius: 0.75rem;
+            border: 2px solid var(--light-lavender);
+            background: var(--white);
+            color: var(--navy);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+
+        .trope-tag:hover {
+            border-color: var(--purple);
+            background: var(--light-lavender);
+            color: var(--purple);
+        }
+
+        .trope-tag.selected {
+            background: linear-gradient(135deg, var(--purple) 0%, #8B5CF6 100%);
+            border-color: var(--purple);
+            color: var(--white);
+        }
+
+        /* Books */
+        .book-card {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .book-cover {
+            width: 100%;
+            height: 200px;
+            background: linear-gradient(135deg, var(--lavender) 0%, var(--light-lavender) 100%);
+            border-radius: 0.75rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 3rem;
+            overflow: hidden;
+            color: var(--purple);
+        }
+
+        .book-title {
+            font-weight: 600;
+            font-size: 1rem;
+            margin-bottom: 0.25rem;
+            color: var(--navy);
+        }
+
+        .book-author {
+            font-size: 0.85rem;
+            color: var(--light-text);
+            margin-bottom: 0.5rem;
+        }
+
+        .book-tropes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+            font-size: 0.75rem;
+        }
+
+        .book-trope {
+            background: var(--light-lavender);
+            color: var(--purple);
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+        }
+
+        .book-rating {
+            display: flex;
+            align-items: center;
+            gap: 0.25rem;
+            margin-bottom: 1rem;
+            color: var(--light-text);
+        }
+
+        .star {
+            color: #FCD34D;
+            font-size: 0.85rem;
+        }
+
+        /* Buttons */
+        .button {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 0.75rem;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+            font-family: 'Poppins', sans-serif;
+        }
+
+        .button-primary {
+            background: linear-gradient(135deg, var(--purple) 0%, #8B5CF6 100%);
+            color: var(--white);
+        }
+
+        .button-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(124, 92, 252, 0.3);
+        }
+
+        .button-secondary {
+            background: var(--light-lavender);
+            color: var(--purple);
+            border: 2px solid var(--purple);
+        }
+
+        .button-secondary:hover {
+            background: var(--purple);
+            color: var(--white);
+        }
+
+        .button-small {
+            padding: 0.5rem 1rem;
+            font-size: 0.85rem;
+        }
+
+        .button-full {
+            width: 100%;
+        }
+
+        /* Shelf Sections */
+        .shelf-section {
+            margin-bottom: 2rem;
+        }
+
+        .shelf-title {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: var(--navy);
+            margin-bottom: 1rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 2px solid var(--light-lavender);
+        }
+
+        .shelf-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 1rem;
+        }
+
+        .shelf-book {
+            text-align: center;
+            cursor: pointer;
+        }
+
+        .shelf-cover {
+            width: 100%;
+            height: 180px;
+            background: linear-gradient(135deg, var(--lavender) 0%, var(--light-lavender) 100%);
+            border-radius: 0.5rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .shelf-cover:hover {
+            transform: scale(1.05);
+            box-shadow: 0 8px 16px rgba(124, 92, 252, 0.2);
+        }
+
+        .shelf-name {
+            font-size: 0.8rem;
+            color: var(--light-text);
+            font-weight: 500;
+        }
+
+        /* Communities */
+        .community-card {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .community-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .community-avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--lavender) 0%, var(--light-lavender) 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            color: var(--purple);
+        }
+
+        .community-info {
+            flex: 1;
+        }
+
+        .community-name {
+            font-weight: 600;
+            color: var(--navy);
+            margin-bottom: 0.25rem;
+        }
+
+        .community-members {
+            font-size: 0.85rem;
+            color: var(--light-text);
+        }
+
+        .community-tropes {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .community-trope {
+            background: var(--light-lavender);
+            color: var(--purple);
+            padding: 0.25rem 0.75rem;
+            border-radius: 0.5rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        /* Local Groups */
+        .group-card {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .group-location {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--light-text);
+            margin-bottom: 0.75rem;
+            font-size: 0.9rem;
+        }
+
+        .group-date {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--purple);
+            margin-bottom: 1rem;
+            font-weight: 500;
+        }
+
+        .group-members {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--light-text);
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: var(--white);
+            border-radius: 1.5rem;
+            padding: 2rem;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-close {
+            float: right;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--light-text);
+            border: none;
+            background: none;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 1rem;
+            clear: both;
+        }
+
+        /* Forms */
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: var(--navy);
+            font-size: 0.95rem;
+        }
+
+        .form-input,
+        .form-select,
+        .form-textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--light-lavender);
+            border-radius: 0.5rem;
+            font-family: 'Poppins', sans-serif;
+            font-size: 0.95rem;
+            color: var(--text);
+        }
+
+        .form-input:focus,
+        .form-select:focus,
+        .form-textarea:focus {
+            outline: none;
+            border-color: var(--purple);
+            box-shadow: 0 0 0 3px rgba(124, 92, 252, 0.1);
+        }
+
+        .form-textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        /* Stats */
+        .stat-box {
+            padding: 1.5rem;
+            border-radius: 1rem;
+            background: linear-gradient(135deg, var(--lavender) 0%, var(--light-lavender) 100%);
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--purple);
+        }
+
+        .stat-label {
+            color: var(--navy);
+            font-weight: 500;
+            margin-top: 0.5rem;
+        }
+
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            background: var(--light-lavender);
+            color: var(--purple);
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 3rem 2rem;
+            color: var(--light-text);
+        }
+
+        .empty-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .app-container {
+                flex-direction: column;
+            }
+
+            .sidebar {
+                width: 100%;
+                height: auto;
+                border-right: none;
+                border-bottom: 1px solid var(--light-lavender);
+                padding: 1rem;
+            }
+
+            .nav-menu {
+                flex-direction: row;
+                overflow-x: auto;
+            }
+
+            .grid-2 {
+                grid-template-columns: 1fr;
+            }
+
+            .main-content {
+                padding: 1rem;
+            }
+
+            .page-title {
+                font-size: 1.5rem;
+            }
+        }
+
+        /* Hidden */
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div class="logo">
+                <span class="logo-heart">💜</span>
+                <span>TropeMatch</span>
+            </div>
+            <ul class="nav-menu">
+                <li class="nav-item active" onclick="showPage('discover')">
+                    <span class="nav-icon">📚</span>
+                    <span>Discover</span>
+                </li>
+                <li class="nav-item" onclick="showPage('shelf')">
+                    <span class="nav-icon">📖</span>
+                    <span>My Shelf</span>
+                </li>
+                <li class="nav-item" onclick="showPage('communities')">
+                    <span class="nav-icon">👯</span>
+                    <span>Communities</span>
+                </li>
+                <li class="nav-item" onclick="showPage('local')">
+                    <span class="nav-icon">📍</span>
+                    <span>Local Groups</span>
+                </li>
+                <li class="nav-item" onclick="showPage('profile')">
+                    <span class="nav-icon">👤</span>
+                    <span>Profile</span>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- DISCOVER PAGE -->
+            <div id="discover-page" class="page">
+                <div class="page-header">
+                    <h1 class="page-title">Discover Books by Tropes</h1>
+                    <p class="page-subtitle">Select your favorite tropes and find your next great read</p>
+                </div>
+
+                <div class="card" style="margin-bottom: 2rem;">
+                    <h2 style="color: var(--navy); margin-bottom: 1rem; font-size: 1.1rem;">Select Your Favorite Tropes</h2>
+                    <div class="trope-grid" id="trope-grid">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <h2 style="color: var(--navy); margin-bottom: 1rem; font-size: 1.3rem;">Recommended Books</h2>
+                <div class="grid" id="books-grid">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- MY SHELF PAGE -->
+            <div id="shelf-page" class="page hidden">
+                <div class="page-header">
+                    <h1 class="page-title">My Shelf</h1>
+                    <p class="page-subtitle">Track your reading journey</p>
+                </div>
+
+                <!-- Want to Read -->
+                <div class="shelf-section">
+                    <div class="shelf-title">📌 Want to Read</div>
+                    <div class="shelf-grid" id="want-to-read">
+                        <!-- Populated by JS -->
+                    </div>
+                    <div id="empty-wtr" class="empty-state" style="display: none;">
+                        <div class="empty-icon">📚</div>
+                        <p>No books yet! Head to Discover to add some.</p>
+                    </div>
+                </div>
+
+                <!-- Currently Reading -->
+                <div class="shelf-section">
+                    <div class="shelf-title">📖 Currently Reading</div>
+                    <div class="shelf-grid" id="currently-reading">
+                        <!-- Populated by JS -->
+                    </div>
+                    <div id="empty-cr" class="empty-state" style="display: none;">
+                        <div class="empty-icon">👀</div>
+                        <p>Start a book to see it here!</p>
+                    </div>
+                </div>
+
+                <!-- Finished -->
+                <div class="shelf-section">
+                    <div class="shelf-title">✨ Finished</div>
+                    <div class="shelf-grid" id="finished">
+                        <!-- Populated by JS -->
+                    </div>
+                    <div id="empty-f" class="empty-state" style="display: none;">
+                        <div class="empty-icon">🎉</div>
+                        <p>Complete a book to celebrate it here!</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- COMMUNITIES PAGE -->
+            <div id="communities-page" class="page hidden">
+                <div class="page-header">
+                    <h1 class="page-title">Reading Communities</h1>
+                    <p class="page-subtitle">Join groups matched to your trope preferences</p>
+                </div>
+
+                <button class="button button-primary button-full" style="margin-bottom: 1.5rem;" onclick="showModal('create-community')">
+                    ✨ Create a Community
+                </button>
+
+                <div class="grid" id="communities-grid">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- LOCAL GROUPS PAGE -->
+            <div id="local-page" class="page hidden">
+                <div class="page-header">
+                    <h1 class="page-title">Local Reading Groups</h1>
+                    <p class="page-subtitle">Meet fellow readers near you for real-world connections</p>
+                </div>
+
+                <button class="button button-primary button-full" style="margin-bottom: 1.5rem;" onclick="showModal('create-group')">
+                    📍 Start a Local Group
+                </button>
+
+                <div class="grid" id="local-groups-grid">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+
+            <!-- PROFILE PAGE -->
+            <div id="profile-page" class="page hidden">
+                <div class="page-header">
+                    <h1 class="page-title">Your Profile</h1>
+                    <p class="page-subtitle">Your reading stats and preferences</p>
+                </div>
+
+                <div class="grid-2">
+                    <div class="stat-box">
+                        <div class="stat-number" id="stat-total">0</div>
+                        <div class="stat-label">Books Finished</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-number" id="stat-reading">0</div>
+                        <div class="stat-label">Currently Reading</div>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 1.5rem;">
+                    <h2 style="color: var(--navy); margin-bottom: 1rem; font-size: 1.2rem;">Your Favorite Tropes</h2>
+                    <div id="profile-tropes" style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <div class="card" style="margin-top: 1.5rem;">
+                    <h2 style="color: var(--navy); margin-bottom: 1rem; font-size: 1.2rem;">Update Your Preferences</h2>
+                    <div class="form-group">
+                        <label class="form-label">Your Location (for local groups)</label>
+                        <input type="text" class="form-input" id="location-input" placeholder="e.g., San Francisco, CA">
+                    </div>
+                    <button class="button button-primary" onclick="updateProfile()">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODALS -->
+    <!-- Book Detail Modal -->
+    <div class="modal" id="book-modal">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('book-modal')">✕</button>
+            <h2 class="modal-title" id="modal-book-title">Book Title</h2>
+            <div id="modal-book-content" style="color: var(--light-text); margin-bottom: 1.5rem;">
+                <!-- Populated by JS -->
+            </div>
+            <div id="modal-book-actions" style="display: flex; gap: 1rem;">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Create Community Modal -->
+    <div class="modal" id="create-community">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('create-community')">✕</button>
+            <h2 class="modal-title">Create a Reading Community</h2>
+            <div class="form-group">
+                <label class="form-label">Community Name</label>
+                <input type="text" class="form-input" id="community-name" placeholder="e.g., Dark Academia Lovers">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Select Tropes (choose at least 1)</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" class="community-trope-check" value="Dark Academia"> Dark Academia
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" class="community-trope-check" value="Enemies to Lovers"> Enemies to Lovers
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" class="community-trope-check" value="Slow Burn"> Slow Burn
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" class="community-trope-check" value="Found Family"> Found Family
+                    </label>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <textarea class="form-textarea" id="community-desc" placeholder="What's your community about?"></textarea>
+            </div>
+            <button class="button button-primary button-full" onclick="createCommunity()">Create Community</button>
+        </div>
+    </div>
+
+    <!-- Create Group Modal -->
+    <div class="modal" id="create-group">
+        <div class="modal-content">
+            <button class="modal-close" onclick="closeModal('create-group')">✕</button>
+            <h2 class="modal-title">Start a Local Reading Group</h2>
+            <div class="form-group">
+                <label class="form-label">Group Name</label>
+                <input type="text" class="form-input" id="group-name" placeholder="e.g., Downtown Book Club">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Location</label>
+                <input type="text" class="form-input" id="group-location" placeholder="e.g., San Francisco, CA">
+            </div>
+            <div class="form-group">
+                <label class="form-label">First Meetup Date</label>
+                <input type="date" class="form-input" id="group-date">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <textarea class="form-textarea" id="group-desc" placeholder="Tell us about your group!"></textarea>
+            </div>
+            <button class="button button-primary button-full" onclick="createGroup()">Create Group</button>
+        </div>
+    </div>
+
+    <script>
+        // Data
+        const tropes = [
+            'Enemies to Lovers',
+            'Dark Academia',
+            'Slow Burn',
+            'Found Family',
+            'Forced Proximity',
+            'Second Chance',
+            'Forbidden Love',
+            'Grumpy/Sunshine',
+            'Love Triangle',
+            'Bodyguard Romance',
+            'Reverse Harem',
+            'Paranormal',
+            'Fantasy Romance',
+            'Small Town',
+            'Secret Baby',
+            'Childhood Friends to Lovers'
+        ];
+
+        const books = [
+            { id: 1, title: 'Six of Crows', author: 'Leigh Bardugo', emoji: '🎭', tropes: ['Found Family', 'Enemies to Lovers', 'Slow Burn'], rating: 4.8 },
+            { id: 2, title: 'The Cruel Prince', author: 'Holly Black', emoji: '👑', tropes: ['Enemies to Lovers', 'Paranormal', 'Forbidden Love'], rating: 4.7 },
+            { id: 3, title: 'Legendborn', author: 'Kara Thomas', emoji: '🏰', tropes: ['Dark Academia', 'Paranormal', 'Found Family'], rating: 4.5 },
+            { id: 4, title: 'Gilded', author: 'Marissa Meyer', emoji: '✨', tropes: ['Dark Academia', 'Enemies to Lovers', 'Paranormal'], rating: 4.4 },
+            { id: 5, title: 'The Shadows Between Us', author: 'Tricia Levenseller', emoji: '⚫', tropes: ['Enemies to Lovers', 'Forbidden Love', 'Slow Burn'], rating: 4.3 },
+            { id: 6, title: 'A Deal with the Elf King', author: 'Elise Kova', emoji: '🧝', tropes: ['Paranormal', 'Forced Proximity', 'Slow Burn'], rating: 4.6 },
+            { id: 7, title: 'Divine Rivals', author: 'Rebecca Ross', emoji: '💌', tropes: ['Enemies to Lovers', 'Slow Burn', 'Small Town'], rating: 4.7 },
+            { id: 8, title: 'Radiance', author: 'Grace Draven', emoji: '💎', tropes: ['Paranormal', 'Forced Proximity', 'Slow Burn'], rating: 4.5 },
+            { id: 9, title: 'The Shadows', author: 'C.L. Wilson', emoji: '🌙', tropes: ['Paranormal', 'Dark Academia', 'Forbidden Love'], rating: 4.4 },
+            { id: 10, title: 'Heartless', author: 'Marissa Meyer', emoji: '♠️', tropes: ['Dark Academia', 'Enemies to Lovers', 'Forbidden Love'], rating: 4.5 },
+            { id: 11, title: 'These Violent Delights', author: 'Chloe Gong', emoji: '🌹', tropes: ['Enemies to Lovers', 'Forbidden Love', 'Found Family'], rating: 4.6 },
+            { id: 12, title: 'The Bone Shard Daughter', author: 'Andrea Stewart', emoji: '🦴', tropes: ['Dark Academia', 'Paranormal', 'Found Family'], rating: 4.4 }
+        ];
+
+        // State
+        let selectedTropes = [];
+        let shelf = {
+            wantToRead: [],
+            currentlyReading: [],
+            finished: []
+        };
+        let communities = [];
+        let localGroups = [];
+        let userLocation = '';
+
+        // Initialize
+        function init() {
+            renderTropeGrid();
+            renderBooks();
+            renderCommunities();
+            renderLocalGroups();
+            updateStats();
+            renderProfileTropes();
+
+            // Sample communities
+            communities = [
+                { id: 1, name: 'Dark Academia Lovers', tropes: ['Dark Academia', 'Paranormal'], members: 342, emoji: '🏰', description: 'Discuss all things gothic and mysterious' },
+                { id: 2, name: 'Enemies to Lovers Central', tropes: ['Enemies to Lovers', 'Slow Burn'], members: 528, emoji: '⚔️', description: 'The tension! The romance! We love it all.' },
+                { id: 3, name: 'Paranormal & Supernatural', tropes: ['Paranormal', 'Paranormal'], members: 610, emoji: '👻', description: 'Explore magical and supernatural worlds' },
+                { id: 4, name: 'Found Family Forever', tropes: ['Found Family', 'Small Town'], members: 387, emoji: '💕', description: 'We celebrate chosen family bonds' }
+            ];
+
+            localGroups = [
+                { id: 1, name: 'Downtown Book Club', location: 'San Francisco, CA', date: '2026-04-15', members: 12, tropes: ['Enemies to Lovers', 'Dark Academia'] },
+                { id: 2, name: 'Cozy Coffee & Books', location: 'Portland, OR', date: '2026-04-22', members: 8, tropes: ['Slow Burn', 'Found Family'] },
+                { id: 3, name: 'Late Night Readers', location: 'New York, NY', date: '2026-04-18', members: 15, tropes: ['Paranormal', 'Dark Academia'] }
+            ];
+
+            renderCommunities();
+            renderLocalGroups();
+        }
+
+        // Trope Grid
+        function renderTropeGrid() {
+            const grid = document.getElementById('trope-grid');
+            grid.innerHTML = tropes.map(trope => `
+                <div class="trope-tag ${selectedTropes.includes(trope) ? 'selected' : ''}" onclick="toggleTrope('${trope}')">
+                    ${trope}
+                </div>
+            `).join('');
+        }
+
+        function toggleTrope(trope) {
+            if (selectedTropes.includes(trope)) {
+                selectedTropes = selectedTropes.filter(t => t !== trope);
+            } else {
+                selectedTropes.push(trope);
+            }
+            renderTropeGrid();
+            renderBooks();
+            renderProfileTropes();
+        }
+
+        // Books
+        function renderBooks() {
+            const grid = document.getElementById('books-grid');
+            let filteredBooks = books;
+
+            if (selectedTropes.length > 0) {
+                filteredBooks = books.filter(book =>
+                    selectedTropes.some(trope => book.tropes.includes(trope))
+                );
+            }
+
+            if (filteredBooks.length === 0) {
+                grid.innerHTML = '<div class="empty-state" style="grid-column: 1 / -1;"><div class="empty-icon">🔍</div><p>No books match those tropes yet. Try selecting different ones!</p></div>';
+                return;
+            }
+
+            grid.innerHTML = filteredBooks.map(book => `
+                <div class="card book-card" onclick="showBookDetail(${book.id})">
+                    <div class="book-cover">${book.emoji}</div>
+                    <div class="book-title">${book.title}</div>
+                    <div class="book-author">${book.author}</div>
+                    <div class="book-tropes">
+                        ${book.tropes.slice(0, 2).map(t => `<span class="book-trope">${t}</span>`).join('')}
+                    </div>
+                    <div class="book-rating">
+                        ${Array(Math.round(book.rating)).fill('⭐').join('')}
+                        <span style="margin-left: auto;">${book.rating}</span>
+                    </div>
+                    <button class="button button-primary button-small button-full" onclick="event.stopPropagation(); addToShelf(${book.id})">Add to Shelf</button>
+                </div>
+            `).join('');
+        }
+
+        function showBookDetail(bookId) {
+            const book = books.find(b => b.id === bookId);
+            document.getElementById('modal-book-title').textContent = book.title;
+            document.getElementById('modal-book-content').innerHTML = `
+                <p><strong>Author:</strong> ${book.author}</p>
+                <p><strong>Tropes:</strong> ${book.tropes.join(', ')}</p>
+                <p><strong>Rating:</strong> ${book.rating} ⭐</p>
+            `;
+            showModal('book-modal');
+        }
+
+        function addToShelf(bookId) {
+            const book = books.find(b => b.id === bookId);
+            if (!shelf.wantToRead.find(b => b.id === bookId)) {
+                shelf.wantToRead.push(book);
+                renderShelf();
+                updateStats();
+                alert(`"${book.title}" added to your Want to Read shelf!`);
+            }
+        }
+
+        // Shelf
+        function renderShelf() {
+            renderShelfSection('want-to-read', shelf.wantToRead, 'empty-wtr');
+            renderShelfSection('currently-reading', shelf.currentlyReading, 'empty-cr');
+            renderShelfSection('finished', shelf.finished, 'empty-f');
+        }
+
+        function renderShelfSection(elementId, books, emptyId) {
+            const container = document.getElementById(elementId);
+            const empty = document.getElementById(emptyId);
+
+            if (books.length === 0) {
+                container.innerHTML = '';
+                empty.style.display = 'block';
+            } else {
+                empty.style.display = 'none';
+                container.innerHTML = books.map(book => `
+                    <div class="shelf-book">
+                        <div class="shelf-cover">${book.emoji}</div>
+                        <div class="shelf-name">${book.title}</div>
+                        <div style="font-size: 0.7rem; color: var(--light-text); margin-top: 0.25rem;">
+                            <button class="button button-secondary button-small" onclick="moveBook(${book.id}, '${elementId}')">Move</button>
+                            <button class="button button-small" style="background: #FEE2E2; color: #DC2626; border: none; margin-left: 0.25rem;" onclick="removeFromShelf(${book.id})">✕</button>
+                        </div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function moveBook(bookId, from) {
+            const book = books.find(b => b.id === bookId);
+            const shelves = ['want-to-read', 'currently-reading', 'finished'];
+            const shelfNames = { 'want-to-read': 'Want to Read', 'currently-reading': 'Currently Reading', 'finished': 'Finished' };
+
+            let newShelf = prompt(`Move "${book.title}" to which shelf?\n\n${shelves.map((s, i) => `${i + 1}. ${shelfNames[s]}`).join('\n')}`);
+            newShelf = parseInt(newShelf) - 1;
+
+            if (newShelf >= 0 && newShelf < shelves.length) {
+                const shelfKey = shelves[newShelf] === 'want-to-read' ? 'wantToRead' : shelves[newShelf] === 'currently-reading' ? 'currentlyReading' : 'finished';
+                const fromKey = from === 'want-to-read' ? 'wantToRead' : from === 'currently-reading' ? 'currentlyReading' : 'finished';
+
+                shelf[fromKey] = shelf[fromKey].filter(b => b.id !== bookId);
+                if (!shelf[shelfKey].find(b => b.id === bookId)) {
+                    shelf[shelfKey].push(book);
+                }
+                renderShelf();
+                updateStats();
+            }
+        }
+
+        function removeFromShelf(bookId) {
+            Object.keys(shelf).forEach(key => {
+                shelf[key] = shelf[key].filter(b => b.id !== bookId);
+            });
+            renderShelf();
+            updateStats();
+        }
+
+        // Communities
+        function renderCommunities() {
+            const grid = document.getElementById('communities-grid');
+            grid.innerHTML = communities.map(com => `
+                <div class="card community-card">
+                    <div class="community-header">
+                        <div class="community-avatar">${com.emoji}</div>
+                        <div class="community-info">
+                            <div class="community-name">${com.name}</div>
+                            <div class="community-members">👥 ${com.members} members</div>
+                        </div>
+                    </div>
+                    <p style="color: var(--light-text); font-size: 0.9rem; margin-bottom: 1rem;">${com.description}</p>
+                    <div class="community-tropes">
+                        ${com.tropes.map(t => `<span class="community-trope">${t}</span>`).join('')}
+                    </div>
+                    <button class="button button-primary button-full" onclick="joinCommunity(${com.id})">Join Community</button>
+                </div>
+            `).join('');
+        }
+
+        function joinCommunity(id) {
+            const com = communities.find(c => c.id === id);
+            alert(`Welcome to ${com.name}! You're now part of the community. 🎉`);
+        }
+
+        function createCommunity() {
+            const name = document.getElementById('community-name').value;
+            const checks = document.querySelectorAll('.community-trope-check:checked');
+            const tropes = Array.from(checks).map(c => c.value);
+
+            if (name && tropes.length > 0) {
+                const newCom = {
+                    id: communities.length + 1,
+                    name,
+                    tropes,
+                    members: 1,
+                    emoji: '💜',
+                    description: document.getElementById('community-desc').value
+                };
+                communities.push(newCom);
+                renderCommunities();
+                closeModal('create-community');
+                alert(`"${name}" community created! 🎉`);
+            } else {
+                alert('Please fill in the community name and select at least one trope.');
+            }
+        }
+
+        // Local Groups
+        function renderLocalGroups() {
+            const grid = document.getElementById('local-groups-grid');
+            const filteredGroups = userLocation ? localGroups.filter(g => g.location.toLowerCase().includes(userLocation.toLowerCase())) : localGroups;
+
+            if (filteredGroups.length === 0) {
+                grid.innerHTML = '<div class="empty-state" style="grid-column: 1 / -1;"><div class="empty-icon">📍</div><p>No groups in your area yet. Why not start one?</p></div>';
+                return;
+            }
+
+            grid.innerHTML = filteredGroups.map(group => `
+                <div class="card group-card">
+                    <h3 style="color: var(--navy); margin-bottom: 1rem;">${group.name}</h3>
+                    <div class="group-location">📍 ${group.location}</div>
+                    <div class="group-date">📅 ${new Date(group.date).toLocaleDateString()}</div>
+                    <div class="group-members">👥 ${group.members} people interested</div>
+                    <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem;">
+                        ${group.tropes.map(t => `<span class="badge">${t}</span>`).join('')}
+                    </div>
+                    <button class="button button-primary button-full" onclick="rsvpGroup(${group.id})">RSVP to Meetup</button>
+                </div>
+            `).join('');
+        }
+
+        function rsvpGroup(id) {
+            const group = localGroups.find(g => g.id === id);
+            group.members += 1;
+            renderLocalGroups();
+            alert(`You're in! See you at ${group.name}! 📚`);
+        }
+
+        function createGroup() {
+            const name = document.getElementById('group-name').value;
+            const location = document.getElementById('group-location').value;
+            const date = document.getElementById('group-date').value;
+
+            if (name && location && date) {
+                const newGroup = {
+                    id: localGroups.length + 1,
+                    name,
+                    location,
+                    date,
+                    members: 1,
+                    tropes: selectedTropes.length > 0 ? selectedTropes.slice(0, 2) : ['Slow Burn', 'Found Family']
+                };
+                localGroups.push(newGroup);
+                renderLocalGroups();
+                closeModal('create-group');
+                alert(`"${name}" group created! 🎉`);
+            } else {
+                alert('Please fill in all fields.');
+            }
+        }
+
+        // Profile
+        function renderProfileTropes() {
+            const container = document.getElementById('profile-tropes');
+            if (selectedTropes.length === 0) {
+                container.innerHTML = '<p style="color: var(--light-text);">Select tropes in Discover to add them to your profile!</p>';
+            } else {
+                container.innerHTML = selectedTropes.map(t => `<span class="badge">${t}</span>`).join('');
+            }
+        }
+
+        function updateStats() {
+            document.getElementById('stat-total').textContent = shelf.finished.length;
+            document.getElementById('stat-reading').textContent = shelf.currentlyReading.length;
+        }
+
+        function updateProfile() {
+            const location = document.getElementById('location-input').value;
+            if (location) {
+                userLocation = location;
+                renderLocalGroups();
+                alert('Profile updated! 💜');
+            }
+        }
+
+        // Navigation
+        function showPage(page) {
+            document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+            document.getElementById(page + '-page').classList.remove('hidden');
+
+            document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+            event.target.closest('.nav-item').classList.add('active');
+        }
+
+        // Modals
+        function showModal(id) {
+            document.getElementById(id).classList.add('active');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+            // Clear form
+            const modal = document.getElementById(id);
+            modal.querySelectorAll('input[type="text"], input[type="date"], textarea').forEach(el => el.value = '');
+            modal.querySelectorAll('input[type="checkbox"]').forEach(el => el.checked = false);
+        }
+
+        // Close modal when clicking outside
+        document.addEventListener('click', e => {
+            if (e.target.classList.contains('modal')) {
+                e.target.classList.remove('active');
+            }
+        });
+
+        // Initialize on load
+        init();
+    </script>
+</body>
+</html>
